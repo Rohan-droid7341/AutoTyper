@@ -141,6 +141,23 @@
             border: 1px solid rgba(255, 255, 255, 0.05);
             margin-top: 8px;
         }
+        .ip-select {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(0, 206, 201, 0.4);
+            color: #00cec9;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            border-radius: 8px;
+            padding: 6px 10px;
+            outline: none;
+            width: 100%;
+            margin-top: 4px;
+            cursor: pointer;
+        }
+        .ip-select option {
+            background: #12182b;
+            color: #fff;
+        }
     </style>
 </head>
 <body>
@@ -182,9 +199,14 @@
                     <h2 style="font-size: 17px; margin: 0; color: #fff;">📱 Phone Pairing</h2>
                     <span class="badge badge-success">🔒 Token Protected</span>
                 </div>
-                <p style="font-size: 13px; color: #8e9bb4; margin: 0;">
-                    Scan with your phone to gain write access. Only paired devices can punch text to this computer.
-                </p>
+
+                <!-- Network Interface Selector -->
+                <div style="width: 100%; text-align: left;">
+                    <span style="font-size: 12px; color: #8e9bb4;">Connection Network / Interface:</span>
+                    <select id="ip-select" class="ip-select" onchange="onIPChange()">
+                        <option value="">Detecting interfaces...</option>
+                    </select>
+                </div>
 
                 <div class="qr-wrapper">
                     <img id="qr-img" src="/api/qr.png" alt="Scan to pair">
@@ -221,12 +243,12 @@
                         <span class="info-val" id="val-port">8080</span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">USB ADB Reverse</span>
-                        <span id="val-adb" class="badge badge-warning">Checking...</span>
+                        <span class="info-label">Active Host IP</span>
+                        <span class="info-val" id="val-ip">Detecting...</span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">Local Wi-Fi IP</span>
-                        <span class="info-val" id="val-ip">Detecting...</span>
+                        <span class="info-label">USB ADB Reverse</span>
+                        <span id="val-adb" class="badge badge-warning">Checking...</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">Failsafe Mode</span>
@@ -240,10 +262,7 @@
                         <h2 style="font-size: 17px; margin: 0; color: #fff;">Connected Devices</h2>
                         <span id="device-count-badge" class="badge badge-success">0 Online</span>
                     </div>
-                    <p style="font-size: 13px; color: #8e9bb4; margin: 0;">
-                        Live connections over USB cable or local Wi-Fi.
-                    </p>
-                    <div id="device-list" style="overflow-y: auto; max-height: 200px;">
+                    <div id="device-list" style="overflow-y: auto; max-height: 180px;">
                         <div style="font-size: 13px; color: #636e72; text-align: center; padding: 20px 0;">
                             No devices paired yet. Scan the QR code with your phone.
                         </div>
@@ -251,11 +270,27 @@
                 </div>
             </div>
         </div>
+
+        <!-- Troubleshooting Box -->
+        <div class="card" style="border: 1px solid rgba(253, 203, 110, 0.3); background: rgba(253, 203, 110, 0.05);">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 18px;">💡</span>
+                <h3 style="margin: 0; color: #ffeaa7; font-size: 15px; font-weight: 600;">Phone says "Connection Interrupted" or Cannot Connect?</h3>
+            </div>
+            <ul style="font-size: 13px; color: #dfe6e9; margin: 0 0 0 18px; padding: 0; line-height: 1.7;">
+                <li><strong>Same Wi-Fi Network:</strong> Verify your phone is connected to the exact same Wi-Fi as your laptop (not mobile data / 5G).</li>
+                <li><strong>Windows Defender Firewall:</strong> If your network is set to "Public" in Windows, Windows blocks incoming connections from other devices. Run <code>allow-firewall.bat</code> as Administrator to unblock port 8080.</li>
+                <li><strong>USB Cable Mode (Zero Wi-Fi Required):</strong> Plug in your phone via USB-C with USB Debugging enabled, choose <code>localhost (USB ADB)</code> in the dropdown above, and open <code>http://localhost:8080</code> on your phone!</li>
+            </ul>
+        </div>
     </div>
 
     <script>
         let currentPairingUrl = '';
         let currentToken = '';
+        let currentPort = 8080;
+        let selectedHost = '';
+        let availableIPs = [];
 
         async function fetchStatus() {
             try {
@@ -263,7 +298,7 @@
                 if (!res.ok) return;
                 const data = await res.json();
 
-                // Update Port
+                currentPort = data.port;
                 document.getElementById('val-port').textContent = data.port;
 
                 // Update ADB
@@ -279,11 +314,6 @@
                     adbBadge.textContent = 'Wi-Fi Mode';
                 }
 
-                // Update IP
-                if (data.local_ips && data.local_ips.length > 0) {
-                    document.getElementById('val-ip').textContent = data.local_ips[0];
-                }
-
                 // Update PIN
                 if (data.pairing_pin) {
                     const pinDigits = data.pairing_pin.split('');
@@ -291,14 +321,38 @@
                     pinContainer.innerHTML = pinDigits.map(d => `<div class="pin-digit">${d}</div>`).join('');
                 }
 
-                // Update Token & URL
+                // Update Token
                 if (data.pairing_token) {
                     currentToken = data.pairing_token;
-                    const host = (data.local_ips && data.local_ips.length > 0) ? data.local_ips[0] : window.location.hostname;
-                    currentPairingUrl = `http://${host}:${data.port}/?token=${data.pairing_token}`;
-                    document.getElementById('pairing-url-input').value = currentPairingUrl;
                     document.getElementById('open-typer-btn').href = `/?token=${data.pairing_token}`;
                 }
+
+                // Update IPs dropdown if changed
+                if (data.local_ips && JSON.stringify(data.local_ips) !== JSON.stringify(availableIPs)) {
+                    availableIPs = data.local_ips;
+                    const select = document.getElementById('ip-select');
+                    select.innerHTML = '';
+
+                    availableIPs.forEach((ip, idx) => {
+                        const opt = document.createElement('option');
+                        opt.value = ip;
+                        opt.textContent = `${ip} ${idx === 0 ? '(Wi-Fi Recommended)' : '(LAN)'}`;
+                        select.appendChild(opt);
+                    });
+
+                    // Add localhost option for ADB reverse cable mode
+                    const optUSB = document.createElement('option');
+                    optUSB.value = 'localhost';
+                    optUSB.textContent = 'localhost (USB-C ADB Reverse)';
+                    select.appendChild(optUSB);
+
+                    if (!selectedHost && availableIPs.length > 0) {
+                        selectedHost = availableIPs[0];
+                    }
+                    select.value = selectedHost;
+                }
+
+                updatePairingDisplay();
 
                 // Update Devices
                 const devList = document.getElementById('device-list');
@@ -332,6 +386,29 @@
 
             } catch (e) {
                 console.error(e);
+            }
+        }
+
+        function onIPChange() {
+            const select = document.getElementById('ip-select');
+            selectedHost = select.value;
+            updatePairingDisplay();
+        }
+
+        function updatePairingDisplay() {
+            if (!selectedHost && availableIPs.length > 0) {
+                selectedHost = availableIPs[0];
+            }
+            const host = selectedHost || window.location.hostname;
+            document.getElementById('val-ip').textContent = host;
+
+            currentPairingUrl = `http://${host}:${currentPort}/?token=${currentToken}`;
+            document.getElementById('pairing-url-input').value = currentPairingUrl;
+
+            const qrImg = document.getElementById('qr-img');
+            const targetQrSrc = `/api/qr.png?ip=${encodeURIComponent(host)}&t=${Date.now()}`;
+            if (!qrImg.src.includes(`ip=${encodeURIComponent(host)}`)) {
+                qrImg.src = targetQrSrc;
             }
         }
 

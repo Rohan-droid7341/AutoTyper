@@ -125,8 +125,11 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleQRCode(w http.ResponseWriter, r *http.Request) {
+	customIP := r.URL.Query().Get("ip")
 	host := "localhost"
-	if len(s.localIPs) > 0 {
+	if customIP != "" {
+		host = customIP
+	} else if len(s.localIPs) > 0 {
 		host = s.localIPs[0]
 	}
 	pairingURL := fmt.Sprintf("http://%s:%d/?token=%s", host, s.port, s.auth.PairingToken)
@@ -277,22 +280,65 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 func findLocalIPs() []string {
 	var ips []string
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return ips
+	seen := make(map[string]bool)
+
+	// 1. Primary outbound LAN IP (routes through the active Wi-Fi / Ethernet default gateway)
+	primary := getPrimaryOutboundIP()
+	if primary != "" && !seen[primary] {
+		ips = append(ips, primary)
+		seen[primary] = true
 	}
-	for _, a := range addrs {
-		if ipNet, ok := a.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
-			if ipNet.IP.To4() != nil {
-				ipStr := ipNet.IP.String()
-				// Prioritize private network IPs
-				if strings.HasPrefix(ipStr, "192.168.") || strings.HasPrefix(ipStr, "10.") || strings.HasPrefix(ipStr, "172.") {
-					ips = append([]string{ipStr}, ips...)
-				} else {
-					ips = append(ips, ipStr)
+
+	// 2. Scan physical network interfaces, filtering out virtual / container / hypervisor switches
+	ifaces, err := net.Interfaces()
+	if err == nil {
+		for _, iface := range ifaces {
+			name := strings.ToLower(iface.Name)
+			if strings.Contains(name, "vethernet") ||
+				strings.Contains(name, "wsl") ||
+				strings.Contains(name, "hyper-v") ||
+				strings.Contains(name, "virtualbox") ||
+				strings.Contains(name, "vmware") ||
+				strings.Contains(name, "docker") ||
+				strings.Contains(name, "loopback") ||
+				iface.Flags&net.FlagUp == 0 ||
+				iface.Flags&net.FlagLoopback != 0 {
+				continue
+			}
+
+			addrs, err := iface.Addrs()
+			if err != nil {
+				continue
+			}
+			for _, a := range addrs {
+				if ipNet, ok := a.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
+					if ip4 := ipNet.IP.To4(); ip4 != nil {
+						ipStr := ip4.String()
+						// Ignore link-local APIPA addresses
+						if strings.HasPrefix(ipStr, "169.254.") {
+							continue
+						}
+						if !seen[ipStr] {
+							ips = append(ips, ipStr)
+							seen[ipStr] = true
+						}
+					}
 				}
 			}
 		}
 	}
+
 	return ips
+}
+
+func getPrimaryOutboundIP() string {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err == nil {
+		defer conn.Close()
+		localAddr, ok := conn.LocalAddr().(*net.UDPAddr)
+		if ok && localAddr.IP.To4() != nil {
+			return localAddr.IP.String()
+		}
+	}
+	return ""
 }
