@@ -9,7 +9,9 @@ type Settings struct {
 	SmartIndent        bool   `json:"smart_indent"`
 	PasteMode          bool   `json:"paste_mode"`
 	JitterMode         bool   `json:"jitter_mode"`
+	JitterLevel        int    `json:"jitter_level"` // 1=Low (25%), 2=Medium (50%), 3=High (80%), 4=Erratic / Thinking Pauses (120%)
 	OopsMode           bool   `json:"oops_mode"`
+	ErrorRate          int    `json:"error_rate"` // 1 to 20 percent (default 3)
 }
 
 // WSMessage defines the protocol for WebSocket events.
@@ -22,7 +24,9 @@ type WSMessage struct {
 	SmartIndent        *bool     `json:"smart_indent,omitempty"`
 	PasteMode          *bool     `json:"paste_mode,omitempty"`
 	JitterMode         *bool     `json:"jitter_mode,omitempty"`
+	JitterLevel        int       `json:"jitter_level,omitempty"`
 	OopsMode           *bool     `json:"oops_mode,omitempty"`
+	ErrorRate          int       `json:"error_rate,omitempty"`
 	DelayMs            int       `json:"delay_ms,omitempty"`
 	Current            int       `json:"current,omitempty"`
 	Total              int       `json:"total,omitempty"`

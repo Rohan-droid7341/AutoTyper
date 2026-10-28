@@ -82,6 +82,31 @@
             transition: all 0.2s;
         }
         .pin-submit-btn:hover { opacity: 0.95; transform: translateY(-1px); }
+        .sub-controls {
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 12px;
+            margin-top: 10px;
+            transition: all 0.3s ease;
+        }
+        .sub-preset-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+            margin-top: 8px;
+        }
+        .sub-preset-grid .preset-btn {
+            padding: 6px 4px;
+            font-size: 11px;
+            text-align: center;
+        }
+        .sub-preset-grid .preset-btn.active {
+            background: #00cec9;
+            color: #0a0a1a;
+            border-color: #00cec9;
+            font-weight: 700;
+        }
     </style>
 </head>
 <body>
@@ -230,26 +255,61 @@
                         <span class="toggle-track"></span>
                     </div>
                 </label>
-                <label class="toggle-option" id="jitter-option">
-                    <span class="toggle-label">
-                        <span>👻 Human-like Jitter</span>
-                        <span class="toggle-hint">Randomizes typing speed to bypass bot detection</span>
-                    </span>
-                    <div class="toggle-switch">
-                        <input type="checkbox" id="jitter-mode">
-                        <span class="toggle-track"></span>
+                <div class="option-container" id="jitter-option-container">
+                    <label class="toggle-option" id="jitter-option">
+                        <span class="toggle-label">
+                            <span>👻 Human-like Jitter</span>
+                            <span class="toggle-hint" id="jitter-hint">Randomizes typing speed to bypass bot detection</span>
+                        </span>
+                        <div class="toggle-switch">
+                            <input type="checkbox" id="jitter-mode">
+                            <span class="toggle-track"></span>
+                        </div>
+                    </label>
+                    <div id="jitter-controls" class="sub-controls" style="display: none;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 12px; color: #8e9bb4;">Jitter Level:</span>
+                            <span id="jitter-level-tag" style="font-size: 12px; color: #00cec9; font-weight: 600;">Med (50%)</span>
+                        </div>
+                        <div class="sub-preset-grid" id="jitter-preset-group">
+                            <button type="button" class="preset-btn jitter-level-btn" data-level="1">Low 25%</button>
+                            <button type="button" class="preset-btn jitter-level-btn active" data-level="2">Med 50%</button>
+                            <button type="button" class="preset-btn jitter-level-btn" data-level="3">High 80%</button>
+                            <button type="button" class="preset-btn jitter-level-btn" data-level="4">Chaos 120%</button>
+                        </div>
                     </div>
-                </label>
-                <label class="toggle-option" id="oops-option">
-                    <span class="toggle-label">
-                        <span>🙈 Oops Mode (Typo Sim)</span>
-                        <span class="toggle-hint">3% chance to make a typo, backspace, and fix it</span>
-                    </span>
-                    <div class="toggle-switch">
-                        <input type="checkbox" id="oops-mode">
-                        <span class="toggle-track"></span>
+                </div>
+
+                <div class="option-container" id="oops-option-container">
+                    <label class="toggle-option" id="oops-option">
+                        <span class="toggle-label">
+                            <span>🙈 Oops Mode (Typo Sim)</span>
+                            <span class="toggle-hint" id="oops-hint">Simulates typos with QWERTY adjacent key hits &amp; fixes</span>
+                        </span>
+                        <div class="toggle-switch">
+                            <input type="checkbox" id="oops-mode">
+                            <span class="toggle-track"></span>
+                        </div>
+                    </label>
+                    <div id="oops-controls" class="sub-controls" style="display: none;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="font-size: 12px; color: #8e9bb4;">Typo Probability:</span>
+                            <span id="error-rate-tag" style="font-size: 12px; color: #00cec9; font-weight: 600;">3% · Normal</span>
+                        </div>
+                        <div class="stepper-field compact" style="width: 100%; margin-bottom: 8px;">
+                            <button type="button" class="stepper-btn" id="error-minus">−</button>
+                            <input type="number" id="error-rate-input" class="numeric-input compact" min="1" max="25" value="3" step="1">
+                            <button type="button" class="stepper-btn" id="error-plus">+</button>
+                            <span class="unit-badge">%</span>
+                        </div>
+                        <div class="sub-preset-grid" id="error-preset-group">
+                            <button type="button" class="preset-btn error-preset-btn" data-rate="1">1% Subtle</button>
+                            <button type="button" class="preset-btn error-preset-btn active" data-rate="3">3% Normal</button>
+                            <button type="button" class="preset-btn error-preset-btn" data-rate="7">7% High</button>
+                            <button type="button" class="preset-btn error-preset-btn" data-rate="12">12% Chaos</button>
+                        </div>
                     </div>
-                </label>
+                </div>
             </section>
 
             <!-- Progress Bar (hidden by default) -->

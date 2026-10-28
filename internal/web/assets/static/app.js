@@ -2,7 +2,7 @@
  * Auto Typer — Companion App Logic (Go Edition)
  * 
  * Connects to the laptop companion via WebSocket over ADB reverse or local Wi-Fi.
- * Token-based pairing ensures only authorized devices have typing access.
+ * Supports configurable Human Jitter intensity, QWERTY proximity typos, and error rates.
  */
 
 (function () {
@@ -61,7 +61,16 @@
         smartIndent: $('smart-indent'),
         pasteMode: $('paste-mode'),
         jitterMode: $('jitter-mode'),
+        jitterControls: $('jitter-controls'),
+        jitterLevelTag: $('jitter-level-tag'),
+        jitterPresetGroup: $('jitter-preset-group'),
         oopsMode: $('oops-mode'),
+        oopsControls: $('oops-controls'),
+        errorRateTag: $('error-rate-tag'),
+        errorRateInput: $('error-rate-input'),
+        errorMinus: $('error-minus'),
+        errorPlus: $('error-plus'),
+        errorPresetGroup: $('error-preset-group'),
         progressSection: $('progress-section'),
         progressLabel: $('progress-label'),
         progressPercent: $('progress-percent'),
@@ -94,6 +103,9 @@
     let reconnectTimer = null;
     let toastTimer = null;
     let wakeLock = null;
+
+    let currentJitterLevel = 2; // 1=Low, 2=Med, 3=High, 4=Chaos
+    let currentErrorRate = 3;    // 1-25%
 
     // ─── Wake Lock ───────────────────────────────────────────
     async function acquireWakeLock() {
@@ -144,6 +156,56 @@
         return `~${mins}m ${secs}s`;
     }
 
+    function updateJitterDisplay(level) {
+        currentJitterLevel = level || currentJitterLevel;
+        if (elements.jitterControls) {
+            elements.jitterControls.style.display = elements.jitterMode.checked ? 'block' : 'none';
+        }
+        if (elements.jitterLevelTag) {
+            const labels = {
+                1: 'Low (25%)',
+                2: 'Med (50%)',
+                3: 'High (80%)',
+                4: 'Chaos (120% + Pauses)'
+            };
+            elements.jitterLevelTag.textContent = labels[currentJitterLevel] || 'Med (50%)';
+        }
+        if (elements.jitterPresetGroup) {
+            elements.jitterPresetGroup.querySelectorAll('.jitter-level-btn').forEach(btn => {
+                btn.classList.toggle('active', parseInt(btn.dataset.level, 10) === currentJitterLevel);
+            });
+        }
+        saveSettings();
+        updateEstimate();
+    }
+
+    function updateErrorRateDisplay(rate) {
+        currentErrorRate = rate !== undefined ? rate : currentErrorRate;
+        if (currentErrorRate < 1) currentErrorRate = 1;
+        if (currentErrorRate > 25) currentErrorRate = 25;
+
+        if (elements.oopsControls) {
+            elements.oopsControls.style.display = elements.oopsMode.checked ? 'block' : 'none';
+        }
+        if (elements.errorRateInput) {
+            elements.errorRateInput.value = currentErrorRate;
+        }
+        if (elements.errorRateTag) {
+            let label = 'Subtle';
+            if (currentErrorRate >= 3 && currentErrorRate < 7) label = 'Normal';
+            else if (currentErrorRate >= 7 && currentErrorRate < 12) label = 'High';
+            else if (currentErrorRate >= 12) label = 'Chaos';
+            elements.errorRateTag.textContent = `${currentErrorRate}% · ${label}`;
+        }
+        if (elements.errorPresetGroup) {
+            elements.errorPresetGroup.querySelectorAll('.error-preset-btn').forEach(btn => {
+                btn.classList.toggle('active', parseInt(btn.dataset.rate, 10) === currentErrorRate);
+            });
+        }
+        saveSettings();
+        updateEstimate();
+    }
+
     // ─── Settings Persistence ────────────────────────────────
     function loadSettings() {
         try {
@@ -154,7 +216,9 @@
             if (saved.smartIndent !== undefined && elements.smartIndent) elements.smartIndent.checked = saved.smartIndent;
             if (saved.pasteMode !== undefined) elements.pasteMode.checked = saved.pasteMode;
             if (saved.jitterMode !== undefined) elements.jitterMode.checked = saved.jitterMode;
+            if (saved.jitterLevel !== undefined) currentJitterLevel = saved.jitterLevel;
             if (saved.oopsMode !== undefined) elements.oopsMode.checked = saved.oopsMode;
+            if (saved.errorRate !== undefined) currentErrorRate = saved.errorRate;
         } catch (e) { /* ignore */ }
     }
 
@@ -167,7 +231,9 @@
                 smartIndent: elements.smartIndent ? elements.smartIndent.checked : true,
                 pasteMode: elements.pasteMode.checked,
                 jitterMode: elements.jitterMode ? elements.jitterMode.checked : false,
+                jitterLevel: currentJitterLevel,
                 oopsMode: elements.oopsMode ? elements.oopsMode.checked : false,
+                errorRate: currentErrorRate,
             }));
         } catch (e) { /* ignore */ }
     }
@@ -353,9 +419,17 @@
                     if (msg.state.jitter_mode !== undefined && elements.jitterMode) {
                         elements.jitterMode.checked = msg.state.jitter_mode;
                     }
+                    if (msg.state.jitter_level !== undefined) {
+                        currentJitterLevel = msg.state.jitter_level;
+                    }
                     if (msg.state.oops_mode !== undefined && elements.oopsMode) {
                         elements.oopsMode.checked = msg.state.oops_mode;
                     }
+                    if (msg.state.error_rate !== undefined) {
+                        currentErrorRate = msg.state.error_rate;
+                    }
+                    updateJitterDisplay();
+                    updateErrorRateDisplay();
                 }
                 break;
 
@@ -375,8 +449,20 @@
                 if (msg.preserve_formatting !== undefined) elements.preserveFormatting.checked = msg.preserve_formatting;
                 if (msg.smart_indent !== undefined && elements.smartIndent) elements.smartIndent.checked = msg.smart_indent;
                 if (msg.paste_mode !== undefined) elements.pasteMode.checked = msg.paste_mode;
-                if (msg.jitter_mode !== undefined && elements.jitterMode) elements.jitterMode.checked = msg.jitter_mode;
-                if (msg.oops_mode !== undefined && elements.oopsMode) elements.oopsMode.checked = msg.oops_mode;
+                if (msg.jitter_mode !== undefined && elements.jitterMode) {
+                    elements.jitterMode.checked = msg.jitter_mode;
+                }
+                if (msg.jitter_level !== undefined) {
+                    currentJitterLevel = msg.jitter_level;
+                }
+                if (msg.oops_mode !== undefined && elements.oopsMode) {
+                    elements.oopsMode.checked = msg.oops_mode;
+                }
+                if (msg.error_rate !== undefined) {
+                    currentErrorRate = msg.error_rate;
+                }
+                updateJitterDisplay();
+                updateErrorRateDisplay();
                 break;
 
             case 'progress':
@@ -442,7 +528,9 @@
             smart_indent: smart,
             paste_mode: paste,
             jitter_mode: jitter,
-            oops_mode: burst
+            jitter_level: currentJitterLevel,
+            oops_mode: burst,
+            error_rate: currentErrorRate,
         });
 
         if (sent) {
@@ -491,7 +579,9 @@
             smart_indent: elements.smartIndent ? elements.smartIndent.checked : true,
             paste_mode: elements.pasteMode.checked,
             jitter_mode: elements.jitterMode ? elements.jitterMode.checked : false,
+            jitter_level: currentJitterLevel,
             oops_mode: elements.oopsMode ? elements.oopsMode.checked : false,
+            error_rate: currentErrorRate,
             wpm: wpm,
         });
 
@@ -620,7 +710,7 @@
         const seconds = totalMs / 1000;
         let estText = `Estimated time: ${formatTime(seconds)}`;
         if ((elements.jitterMode && elements.jitterMode.checked) || (elements.oopsMode && elements.oopsMode.checked)) {
-            estText += ' (Approx, Jitter/Oops on)';
+            estText += ' (Approx, Jitter/Oops active)';
         }
         elements.estimate.textContent = estText;
     }
@@ -726,16 +816,55 @@
                 updateEstimate();
             });
         }
+
+        // Jitter Mode toggles & presets
         if (elements.jitterMode) {
             elements.jitterMode.addEventListener('change', () => {
-                saveSettings();
-                updateEstimate();
+                updateJitterDisplay();
             });
         }
+
+        if (elements.jitterPresetGroup) {
+            elements.jitterPresetGroup.addEventListener('click', (e) => {
+                const btn = e.target.closest('.jitter-level-btn');
+                if (btn && btn.dataset.level) {
+                    updateJitterDisplay(parseInt(btn.dataset.level, 10));
+                }
+            });
+        }
+
+        // Oops Mode toggles, steppers & presets
         if (elements.oopsMode) {
             elements.oopsMode.addEventListener('change', () => {
-                saveSettings();
-                updateEstimate();
+                updateErrorRateDisplay();
+            });
+        }
+
+        if (elements.errorMinus) {
+            elements.errorMinus.addEventListener('click', () => {
+                updateErrorRateDisplay(currentErrorRate - 1);
+            });
+        }
+
+        if (elements.errorPlus) {
+            elements.errorPlus.addEventListener('click', () => {
+                updateErrorRateDisplay(currentErrorRate + 1);
+            });
+        }
+
+        if (elements.errorRateInput) {
+            elements.errorRateInput.addEventListener('change', () => {
+                const val = parseInt(elements.errorRateInput.value, 10);
+                if (!isNaN(val)) updateErrorRateDisplay(val);
+            });
+        }
+
+        if (elements.errorPresetGroup) {
+            elements.errorPresetGroup.addEventListener('click', (e) => {
+                const btn = e.target.closest('.error-preset-btn');
+                if (btn && btn.dataset.rate) {
+                    updateErrorRateDisplay(parseInt(btn.dataset.rate, 10));
+                }
             });
         }
 
@@ -787,6 +916,8 @@
         updateSpeedDisplay();
         updateCharCount();
         updateTextareaState();
+        updateJitterDisplay();
+        updateErrorRateDisplay();
         renderHistory();
         initEventListeners();
         connect();
