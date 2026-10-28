@@ -61,7 +61,11 @@ func main() {
 	if err == nil && resp.StatusCode == http.StatusOK {
 		fmt.Println("✓ Graceful shutdown signal delivered successfully.")
 	} else {
-		fmt.Println("⚠️  Server did not respond to HTTP shutdown, terminating process directly...")
+		if err != nil {
+			fmt.Printf("⚠️  HTTP shutdown failed (%v), terminating process directly...\n", err)
+		} else {
+			fmt.Printf("⚠️  HTTP shutdown returned status %d, terminating process directly...\n", resp.StatusCode)
+		}
 		if runtime.GOOS == "windows" {
 			_ = exec.Command("taskkill", "/F", "/PID", strconv.Itoa(info.PID)).Run()
 		} else {
