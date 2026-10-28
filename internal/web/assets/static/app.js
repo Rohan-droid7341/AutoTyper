@@ -1,20 +1,36 @@
 /**
- * Keyboard Punch — Phone-side & Desktop App Logic
+ * Auto Typer — Companion App Logic (Go Edition)
  * 
- * Connects to the laptop companion via WebSocket over ADB reverse or local network.
- * Supports cross-device code synchronization, configurable WPM speed input,
- * and customizable focus delay countdown.
+ * Connects to the laptop companion via WebSocket over ADB reverse or local Wi-Fi.
+ * Token-based pairing ensures only authorized devices have typing access.
  */
 
 (function () {
     'use strict';
 
-    // ─── Constants ───────────────────────────────────────────
-    const WS_URL = `ws://${location.hostname || 'localhost'}:8765`;
-    const RECONNECT_INTERVAL = 3000;
+    // ─── Constants & Token Handling ──────────────────────────
+    const RECONNECT_INTERVAL = 2500;
     const MAX_HISTORY = 10;
-    const HISTORY_KEY = 'keyboard_punch_history';
-    const SETTINGS_KEY = 'keyboard_punch_settings';
+    const HISTORY_KEY = 'autotyper_history';
+    const SETTINGS_KEY = 'autotyper_settings';
+    const TOKEN_KEY = 'autotyper_pairing_token';
+
+    function getPairingToken() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlToken = urlParams.get('token');
+        if (urlToken) {
+            localStorage.setItem(TOKEN_KEY, urlToken);
+            return urlToken;
+        }
+        return localStorage.getItem(TOKEN_KEY) || '';
+    }
+
+    function getWebSocketUrl() {
+        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = location.host;
+        const token = getPairingToken();
+        return `${protocol}//${host}/ws?token=${encodeURIComponent(token)}`;
+    }
 
     // ─── DOM Elements ────────────────────────────────────────
     const $ = (id) => document.getElementById(id);
@@ -24,6 +40,10 @@
         connectionBadge: $('connection-badge'),
         connectionDot: $('connection-dot'),
         connectionText: $('connection-text'),
+        authStatusBadge: $('auth-status-badge'),
+        pairingModalOverlay: $('pairing-modal-overlay'),
+        pinInput: $('pin-input'),
+        pinSubmitBtn: $('pin-submit-btn'),
         textInput: $('text-input'),
         textareaWrapper: $('textarea-wrapper'),
         charCount: $('char-count'),
@@ -68,25 +88,21 @@
     // ─── State ───────────────────────────────────────────────
     let ws = null;
     let isConnected = false;
+    let isAuthorized = false;
     let isPunching = false;
     let countdownTimer = null;
     let reconnectTimer = null;
     let toastTimer = null;
     let wakeLock = null;
 
-    // ─── Wake Lock (prevent screen sleep while typing) ───────
-
+    // ─── Wake Lock ───────────────────────────────────────────
     async function acquireWakeLock() {
         try {
             if ('wakeLock' in navigator) {
                 wakeLock = await navigator.wakeLock.request('screen');
-                wakeLock.addEventListener('release', () => {
-                    wakeLock = null;
-                });
+                wakeLock.addEventListener('release', () => { wakeLock = null; });
             }
-        } catch (e) {
-            // Wake Lock not supported or denied
-        }
+        } catch (e) { /* ignore */ }
     }
 
     async function releaseWakeLock() {
@@ -99,7 +115,6 @@
     }
 
     // ─── Utility Functions ───────────────────────────────────
-
     function getSpeed() {
         const val = parseInt(elements.speedInput.value, 10);
         if (isNaN(val) || val < 10) return 10;
@@ -114,11 +129,6 @@
         return val;
     }
 
-    /**
-     * Convert WPM to milliseconds delay between characters.
-     * Average word = 5 characters, so:
-     * delay_ms = 60000 / (WPM * 5) = 12000 / WPM
-     */
     function wpmToDelay(wpm) {
         return Math.max(1, Math.round(12000 / wpm));
     }
@@ -135,31 +145,16 @@
     }
 
     // ─── Settings Persistence ────────────────────────────────
-
     function loadSettings() {
         try {
             const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
-            if (saved.wpm) {
-                elements.speedInput.value = saved.wpm;
-            }
-            if (saved.focusDelay !== undefined) {
-                elements.delayInput.value = saved.focusDelay;
-            }
-            if (saved.preserveFormatting !== undefined) {
-                elements.preserveFormatting.checked = saved.preserveFormatting;
-            }
-            if (saved.smartIndent !== undefined && elements.smartIndent) {
-                elements.smartIndent.checked = saved.smartIndent;
-            }
-            if (saved.pasteMode !== undefined) {
-                elements.pasteMode.checked = saved.pasteMode;
-            }
-            if (saved.jitterMode !== undefined) {
-                elements.jitterMode.checked = saved.jitterMode;
-            }
-            if (saved.oopsMode !== undefined) {
-                elements.oopsMode.checked = saved.oopsMode;
-            }
+            if (saved.wpm) elements.speedInput.value = saved.wpm;
+            if (saved.focusDelay !== undefined) elements.delayInput.value = saved.focusDelay;
+            if (saved.preserveFormatting !== undefined) elements.preserveFormatting.checked = saved.preserveFormatting;
+            if (saved.smartIndent !== undefined && elements.smartIndent) elements.smartIndent.checked = saved.smartIndent;
+            if (saved.pasteMode !== undefined) elements.pasteMode.checked = saved.pasteMode;
+            if (saved.jitterMode !== undefined) elements.jitterMode.checked = saved.jitterMode;
+            if (saved.oopsMode !== undefined) elements.oopsMode.checked = saved.oopsMode;
         } catch (e) { /* ignore */ }
     }
 
@@ -178,13 +173,10 @@
     }
 
     // ─── History ─────────────────────────────────────────────
-
     function loadHistory() {
         try {
             return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
-        } catch (e) {
-            return [];
-        }
+        } catch (e) { return []; }
     }
 
     function saveHistory(history) {
@@ -258,14 +250,14 @@
     }
 
     // ─── WebSocket Connection ────────────────────────────────
-
     function connect() {
         if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
             return;
         }
 
+        const wsUrl = getWebSocketUrl();
         try {
-            ws = new WebSocket(WS_URL);
+            ws = new WebSocket(wsUrl);
         } catch (e) {
             scheduleReconnect();
             return;
@@ -275,7 +267,7 @@
             isConnected = true;
             updateConnectionUI(true);
             clearTimeout(reconnectTimer);
-            showToast('⚡', 'Connected to laptop companion', 'success');
+            showToast('⚡', 'Connected to companion', 'success');
         };
 
         ws.onclose = () => {
@@ -287,9 +279,7 @@
             scheduleReconnect();
         };
 
-        ws.onerror = () => {
-            // onclose will trigger next
-        };
+        ws.onerror = () => { /* onclose will follow */ };
 
         ws.onmessage = (event) => {
             handleMessage(event.data);
@@ -309,20 +299,36 @@
         updatePunchButtonState();
     }
 
-    // ─── Message Handling & Synchronization ──────────────────
+    function updateAuthUI(authorized) {
+        isAuthorized = authorized;
+        if (elements.authStatusBadge) {
+            elements.authStatusBadge.className = `auth-status-badge ${authorized ? 'paired' : 'unpaired'}`;
+            elements.authStatusBadge.textContent = authorized ? '🔒 Paired' : '⚠️ Unpaired';
+        }
 
+        if (elements.pairingModalOverlay) {
+            if (authorized) {
+                elements.pairingModalOverlay.classList.add('hidden');
+            } else {
+                elements.pairingModalOverlay.classList.remove('hidden');
+            }
+        }
+        updatePunchButtonState();
+    }
+
+    // ─── Message Handling ────────────────────────────────────
     function handleMessage(data) {
         let msg;
         try {
             msg = JSON.parse(data);
-        } catch (e) {
-            return;
-        }
+        } catch (e) { return; }
 
         switch (msg.type) {
             case 'sync_state':
+                if (msg.authorized !== undefined) {
+                    updateAuthUI(msg.authorized);
+                }
                 if (msg.state) {
-                    // When connecting, sync existing code if current text area is empty
                     if (msg.state.text && !elements.textInput.value.trim()) {
                         elements.textInput.value = msg.state.text;
                         updateCharCount();
@@ -354,7 +360,6 @@
                 break;
 
             case 'code_updated':
-                // Received an update from another connected device (Mac or Phone)
                 if (msg.text !== undefined) {
                     elements.textInput.value = msg.text;
                     updateCharCount();
@@ -366,24 +371,12 @@
                     elements.speedInput.value = msg.wpm;
                     updateSpeedDisplay();
                 }
-                if (msg.focus_delay_sec !== undefined) {
-                    elements.delayInput.value = msg.focus_delay_sec;
-                }
-                if (msg.preserve_formatting !== undefined) {
-                    elements.preserveFormatting.checked = msg.preserve_formatting;
-                }
-                if (msg.smart_indent !== undefined && elements.smartIndent) {
-                    elements.smartIndent.checked = msg.smart_indent;
-                }
-                if (msg.paste_mode !== undefined) {
-                    elements.pasteMode.checked = msg.paste_mode;
-                }
-                if (msg.jitter_mode !== undefined && elements.jitterMode) {
-                    elements.jitterMode.checked = msg.jitter_mode;
-                }
-                if (msg.oops_mode !== undefined && elements.oopsMode) {
-                    elements.oopsMode.checked = msg.oops_mode;
-                }
+                if (msg.focus_delay_sec !== undefined) elements.delayInput.value = msg.focus_delay_sec;
+                if (msg.preserve_formatting !== undefined) elements.preserveFormatting.checked = msg.preserve_formatting;
+                if (msg.smart_indent !== undefined && elements.smartIndent) elements.smartIndent.checked = msg.smart_indent;
+                if (msg.paste_mode !== undefined) elements.pasteMode.checked = msg.paste_mode;
+                if (msg.jitter_mode !== undefined && elements.jitterMode) elements.jitterMode.checked = msg.jitter_mode;
+                if (msg.oops_mode !== undefined && elements.oopsMode) elements.oopsMode.checked = msg.oops_mode;
                 break;
 
             case 'progress':
@@ -397,14 +390,14 @@
             case 'error':
                 stopPunching(msg.message || 'An error occurred');
                 showToast('✕', msg.message || 'Error', 'error');
+                if (msg.message && msg.message.toLowerCase().includes('unauthorized')) {
+                    updateAuthUI(false);
+                }
                 break;
 
             case 'stopped':
                 stopPunching('Stopped');
                 showToast('■', 'Typing stopped', 'error');
-                break;
-
-            case 'pong':
                 break;
         }
     }
@@ -419,16 +412,18 @@
 
     function flashSyncHighlight() {
         elements.textareaWrapper.classList.remove('synced-highlight');
-        void elements.textareaWrapper.offsetWidth; // Force re-render
+        void elements.textareaWrapper.offsetWidth;
         elements.textareaWrapper.classList.add('synced-highlight');
-        setTimeout(() => {
-            elements.textareaWrapper.classList.remove('synced-highlight');
-        }, 1500);
+        setTimeout(() => elements.textareaWrapper.classList.remove('synced-highlight'), 1500);
     }
 
-    // ─── Code Update / Sync Action ───────────────────────────
-
     function sendUpdateCode() {
+        if (!isAuthorized) {
+            updateAuthUI(false);
+            showToast('!', 'Pairing required to update code', 'error');
+            return;
+        }
+
         const text = elements.textInput.value;
         const wpm = getSpeed();
         const delaySec = getDelay();
@@ -437,11 +432,6 @@
         const paste = elements.pasteMode.checked;
         const jitter = elements.jitterMode ? elements.jitterMode.checked : false;
         const burst = elements.oopsMode ? elements.oopsMode.checked : false;
-
-        if (!isConnected) {
-            showToast('!', 'Not connected to laptop companion', 'error');
-            return;
-        }
 
         const sent = sendMessage({
             type: 'update_code',
@@ -464,16 +454,20 @@
         }
     }
 
-    // ─── Punching / Typing Logic ─────────────────────────────
-
     function startPunchFlow() {
+        if (!isAuthorized) {
+            updateAuthUI(false);
+            showToast('!', 'Pairing required before typing', 'error');
+            return;
+        }
+
         const text = elements.textInput.value;
         if (!text.trim()) {
-            showToast('!', 'Enter or paste some code first', 'error');
+            showToast('!', 'Enter or paste some text first', 'error');
             return;
         }
         if (!isConnected) {
-            showToast('!', 'Not connected to laptop companion', 'error');
+            showToast('!', 'Not connected to companion', 'error');
             return;
         }
 
@@ -529,14 +523,9 @@
         elements.ambientGlow.classList.remove('punching');
         releaseWakeLock();
         showToast('✓', 'Typing complete!', 'success');
-
         elements.punchBtn.style.background = 'linear-gradient(135deg, #00cec9, #55efc4)';
-        setTimeout(() => {
-            elements.punchBtn.style.background = '';
-        }, 1200);
+        setTimeout(() => elements.punchBtn.style.background = '', 1200);
     }
-
-    // ─── UI Updates ──────────────────────────────────────────
 
     function showPunchingUI(totalChars) {
         elements.progressSection.classList.remove('hidden');
@@ -573,11 +562,7 @@
         const etaSeconds = (remaining * delayMs) / 1000;
         elements.progressEta.textContent = formatTime(etaSeconds);
 
-        if (percent >= 100) {
-            elements.progressLabel.textContent = 'Complete!';
-        } else {
-            elements.progressLabel.textContent = 'Typing...';
-        }
+        elements.progressLabel.textContent = percent >= 100 ? 'Complete!' : 'Typing...';
     }
 
     function updateCharCount() {
@@ -590,29 +575,25 @@
     }
 
     function updateTextareaState() {
-        const hasText = elements.textInput.value.length > 0;
-        elements.textareaWrapper.classList.toggle('has-text', hasText);
+        elements.textareaWrapper.classList.toggle('has-text', elements.textInput.value.length > 0);
     }
 
     function updatePunchButtonState() {
         const hasText = elements.textInput.value.trim().length > 0;
-        elements.punchBtn.disabled = !hasText || !isConnected || isPunching;
-        elements.updateBtn.disabled = !isConnected || isPunching;
+        elements.punchBtn.disabled = !hasText || !isConnected || !isAuthorized || isPunching;
+        elements.updateBtn.disabled = !isConnected || !isAuthorized || isPunching;
     }
 
     function updateSpeedDisplay() {
         const wpm = getSpeed();
-
-        let label = '';
-        if (wpm <= 30) label = 'Slow';
-        else if (wpm <= 60) label = 'Moderate';
-        else if (wpm <= 120) label = 'Fast';
-        else if (wpm <= 180) label = 'Very Fast';
-        else label = 'Blazing';
+        let label = 'Slow';
+        if (wpm > 30 && wpm <= 60) label = 'Moderate';
+        else if (wpm > 60 && wpm <= 120) label = 'Fast';
+        else if (wpm > 120 && wpm <= 180) label = 'Very Fast';
+        else if (wpm > 180) label = 'Blazing';
 
         elements.speedTag.textContent = `${wpm} WPM · ${label}`;
 
-        // Update active preset button
         if (elements.speedPresets) {
             elements.speedPresets.querySelectorAll('.preset-btn').forEach(btn => {
                 btn.classList.toggle('active', parseInt(btn.dataset.speed, 10) === wpm);
@@ -644,8 +625,6 @@
         elements.estimate.textContent = estText;
     }
 
-    // ─── Countdown ───────────────────────────────────────────
-
     function startCountdown(seconds, callback) {
         let remaining = seconds;
         elements.countdownOverlay.classList.remove('hidden');
@@ -672,32 +651,23 @@
         elements.countdownOverlay.classList.add('hidden');
     }
 
-    // ─── Toast ───────────────────────────────────────────────
-
     function showToast(icon, message, type = '') {
         clearTimeout(toastTimer);
         elements.toastIcon.textContent = icon;
         elements.toastMessage.textContent = message;
         elements.toast.className = `toast ${type}`;
-
         void elements.toast.offsetWidth;
         elements.toast.classList.add('show');
-
-        toastTimer = setTimeout(() => {
-            elements.toast.classList.remove('show');
-        }, 3000);
+        toastTimer = setTimeout(() => elements.toast.classList.remove('show'), 3000);
     }
 
     // ─── Event Listeners ─────────────────────────────────────
-
     function initEventListeners() {
-        // Text input
         elements.textInput.addEventListener('input', () => {
             updateCharCount();
             updateTextareaState();
         });
 
-        // Clear text
         elements.clearBtn.addEventListener('click', (e) => {
             e.preventDefault();
             elements.textInput.value = '';
@@ -706,7 +676,6 @@
             elements.textInput.focus();
         });
 
-        // Speed Input & Steppers
         elements.speedInput.addEventListener('input', updateSpeedDisplay);
         elements.speedInput.addEventListener('change', () => {
             elements.speedInput.value = getSpeed();
@@ -723,7 +692,6 @@
             updateSpeedDisplay();
         });
 
-        // Speed Presets
         if (elements.speedPresets) {
             elements.speedPresets.addEventListener('click', (e) => {
                 const btn = e.target.closest('.preset-btn');
@@ -734,7 +702,6 @@
             });
         }
 
-        // Delay Input & Steppers
         elements.delayInput.addEventListener('input', saveSettings);
         elements.delayInput.addEventListener('change', () => {
             elements.delayInput.value = getDelay();
@@ -751,11 +718,8 @@
             saveSettings();
         });
 
-        // Settings toggles
         elements.preserveFormatting.addEventListener('change', saveSettings);
-        if (elements.smartIndent) {
-            elements.smartIndent.addEventListener('change', saveSettings);
-        }
+        if (elements.smartIndent) elements.smartIndent.addEventListener('change', saveSettings);
         if (elements.pasteMode) {
             elements.pasteMode.addEventListener('change', () => {
                 saveSettings();
@@ -775,44 +739,48 @@
             });
         }
 
-        // Update button (sync code across devices)
         elements.updateBtn.addEventListener('click', sendUpdateCode);
-
-        // Punch / Start Typing button
         elements.punchBtn.addEventListener('click', startPunchFlow);
-
-        // Stop button
         elements.stopBtn.addEventListener('click', stopPunchingRequest);
-
-        // Countdown cancel
         elements.countdownCancel.addEventListener('click', cancelCountdown);
 
-        // Clear history
+        // PIN pairing button
+        if (elements.pinSubmitBtn && elements.pinInput) {
+            elements.pinSubmitBtn.addEventListener('click', () => {
+                const pin = elements.pinInput.value.trim();
+                if (pin.length < 6) {
+                    showToast('!', 'Please enter the 6-digit PIN', 'error');
+                    return;
+                }
+                localStorage.setItem(TOKEN_KEY, pin);
+                if (ws) ws.close();
+                connect();
+            });
+
+            elements.pinInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    elements.pinSubmitBtn.click();
+                }
+            });
+        }
+
         elements.clearHistoryBtn.addEventListener('click', () => {
             localStorage.removeItem(HISTORY_KEY);
             renderHistory();
             showToast('✓', 'History cleared', 'success');
         });
 
-        // Handle visibility change (reconnect when app comes to foreground)
         document.addEventListener('visibilitychange', () => {
-            if (!document.hidden && !isConnected) {
-                connect();
-            }
+            if (!document.hidden && !isConnected) connect();
         });
 
-        // Prevent zoom on double tap
         let lastTouchEnd = 0;
         document.addEventListener('touchend', (e) => {
             const now = Date.now();
-            if (now - lastTouchEnd <= 300) {
-                e.preventDefault();
-            }
+            if (now - lastTouchEnd <= 300) e.preventDefault();
             lastTouchEnd = now;
         }, { passive: false });
     }
-
-    // ─── Initialization ──────────────────────────────────────
 
     function init() {
         loadSettings();
@@ -823,23 +791,17 @@
         initEventListeners();
         connect();
 
-        // Keyboard shortcut: Ctrl/Cmd+Enter to punch, Ctrl/Cmd+S to update
         document.addEventListener('keydown', (e) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
                 e.preventDefault();
-                if (!elements.punchBtn.disabled) {
-                    startPunchFlow();
-                }
+                if (!elements.punchBtn.disabled) startPunchFlow();
             } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
                 e.preventDefault();
-                if (!elements.updateBtn.disabled) {
-                    sendUpdateCode();
-                }
+                if (!elements.updateBtn.disabled) sendUpdateCode();
             }
         });
     }
 
-    // Start the app
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {

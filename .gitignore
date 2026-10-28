@@ -1,11 +1,16 @@
-__pycache__/
-*.py[cod]
-*$py.class
+# Go binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+
+# OS files
 .DS_Store
+Thumbs.db
 *.swp
 *.swo
 
-# PyInstaller build artifacts
-build/
-dist/
-*.spec
+# Lock files
+*.lock

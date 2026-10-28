@@ -1,166 +1,67 @@
-# ⌨️ Keyboard Punch
+# ⌨️ Auto Typer (Go Edition)
 
-**Turn your Android phone into a USB keyboard for your laptop.**
+**Turn your phone or tablet into a high-speed, secure wireless/USB keyboard for your computer.**
 
-Type or paste text on your phone, press "Start Punching", and watch it get typed out on your laptop — character by character, at your chosen speed (10–250 WPM).
+Built in **pure Go** with zero external dependencies or runtime environments (no Python, Node.js, or pip required).
 
 ---
 
-## How It Works
+## 🚀 Quick Start (Two-File Package)
+
+The compiled package contains just two files:
 
 ```
-📱 Phone (Chrome)  ──USB-C──►  💻 Laptop (Python)  ──►  🖥️ Active App
-   Web App UI          ADB        Companion Script       Keystroke Sim
-                     Reverse
+📁 Auto Typer/
+├── server.exe    ← Double-click to start server & open Pairing Hub
+└── stop.exe      ← Double-click to cleanly shut down the server
 ```
 
-1. The **companion script** runs on your laptop — it sets up ADB reverse port forwarding over USB-C
-2. You open **Chrome on your phone** → `http://localhost:8080`
-3. Type/paste text, set speed, press **"Start Punching"**
-4. Text is sent via WebSocket through the USB cable
-5. The script types it into whatever app has focus on your laptop
+### 1. Start the Server
+Double-click **`server.exe`**.
+- Starts the embedded web server and WebSocket engine.
+- Automatically launches your default browser to the **Pairing Hub** (`http://localhost:8080/dashboard`).
+- If an Android phone is connected via USB-C with USB Debugging enabled, it automatically sets up ADB reverse port forwarding.
 
-> **No Wi-Fi needed.** All communication happens through the USB-C cable.
+### 2. Pair Your Phone
+- **Scan the QR Code** displayed on the laptop dashboard using your phone's camera.
+- *Alternatively*: Open the URL directly on your phone and enter the **6-digit PIN** shown on your laptop screen.
+
+> 🔒 **Security Guarantee**: Only devices that scan the QR code or enter the secret PIN gain write/typing permissions. Unauthorized visitors on your local network cannot hijack or type into your computer.
+
+### 3. Type or Punch
+1. Paste or type your code/text on your phone.
+2. Select your desired speed (10–500 WPM) and mode:
+   - **🧠 Smart IDE Auto-Indent**: Automatically adjusts for IDE auto-indentation and dedents when needed.
+   - **👻 Human-like Jitter**: Adds natural keystroke timing variance to bypass bot detection.
+   - **🙈 Oops Mode**: Simulates human typos with natural backspacing and corrections.
+   - **📋 Fast Paste**: Instantly injects full text payloads via clipboard.
+3. Tap **Start Typing** — focus the target application on your laptop during the countdown.
+
+### 4. Stop the Server
+Double-click **`stop.exe`** anytime to gracefully shut down the server and clean up any ADB reverse tunnels.
 
 ---
 
-## Prerequisites
+## 🛡️ Safety & Failsafe Features
 
-| Requirement | How to Get It |
-|-------------|---------------|
-| **Python 3.8+** | Usually pre-installed on macOS/Linux. For Windows, download from python.org. Check: `python3 --version` |
-| **ADB** | **Windows:** Run `winget install Google.PlatformTools` in PowerShell<br>**macOS:** Run `brew install android-platform-tools` in Terminal<br>**Linux (Ubuntu/Debian):** Run `sudo apt install adb` |
-| **USB Debugging** | On your phone: Settings → About Phone → Tap "Build Number" 7 times → Back → Developer Options → Enable "USB Debugging" |
-| **USB Cable** | A data-capable USB cable (not charge-only) |
+- **Mouse Corner Failsafe**: Move your mouse cursor into any corner of the laptop screen to immediately abort all typing.
+- **Stop Button**: Tap the Stop button on the web app to cancel the current job.
+- **Token Verification**: Unpaired network clients are blocked from executing keystrokes or clipboard operations.
 
 ---
 
-## Quick Start
+## 🛠️ Building from Source
 
-### 1. Connect your phone via USB-C
-
-Plug in your Android phone. If prompted on the phone, tap **"Allow USB Debugging"**.
-
-### 2. Run the companion script
+Requires [Go 1.22+](https://golang.org):
 
 ```bash
-# Option A: One-command launcher
-chmod +x companion/start.sh
-./companion/start.sh
+# Clone the repository
+git clone <repo-url>
+cd "Auto typer"
 
-# Option B: Manual
-pip3 install -r companion/requirements.txt
-python3 companion/server.py
+# Build self-contained executables
+go build -ldflags="-s -w" -o server.exe ./cmd/server
+go build -ldflags="-s -w" -o stop.exe ./cmd/stop
 ```
 
-### 3. Open the app on your phone
-
-Open **Chrome** on your phone and navigate to:
-
-```
-http://localhost:8080
-```
-
-### 4. Start punching!
-
-1. Type or paste your text in the text box
-2. Adjust typing speed (10–250 WPM)
-3. Click to the target app on your laptop (e.g., VS Code, Terminal)
-4. Press **"Start Punching"** on your phone
-5. The 3-second countdown gives you time to focus the target app
-
----
-
-## Features
-
-- **⚡ Adjustable Speed** — 10 to 250 WPM with real-time preview
-- **📝 Full Formatting** — Newlines, tabs, spaces, special characters
-- **⏱️ Focus Countdown** — 3-second delay to switch to target app
-- **📊 Live Progress** — Real-time progress bar with ETA
-- **🛑 Emergency Stop** — Stop button or move mouse to screen corner
-- **📋 History** — Last 10 sent texts, tap to reuse
-- **🔌 Auto-Reconnect** — Reconnects if USB is briefly disconnected
-- **🎨 Premium Dark UI** — Glassmorphism design, smooth animations
-
----
-
-## Verify Setup
-
-Run the built-in test to check everything is configured correctly:
-
-```bash
-python3 companion/server.py --test
-```
-
-This checks:
-- ✅ Python packages installed
-- ✅ ADB found and device connected
-- ✅ App files present
-- ✅ Keyboard simulation working
-
----
-
-## macOS Permissions
-
-On macOS, you need to grant **Accessibility** permissions to your terminal app for keyboard simulation to work:
-
-1. Go to **System Settings → Privacy & Security → Accessibility**
-2. Click the **+** button
-3. Add your terminal app (Terminal, iTerm2, VS Code, etc.)
-4. Toggle it **ON**
-
----
-
-## Troubleshooting
-
-### "No Android device detected"
-- Make sure USB Debugging is enabled
-- Try a different USB-C cable (some are charge-only)
-- Run `adb devices` to verify
-- On the phone, check for a "USB Debugging" authorization popup
-
-### "localhost:8080 not loading on phone"
-- Make sure the companion script is running
-- Check that ADB reverse is set up: `adb reverse --list`
-- Try: `adb reverse tcp:8080 tcp:8080` manually
-
-### "Typing not working / no keystrokes"
-- Grant Accessibility permissions (see macOS Permissions above)
-- Make sure the target app has focus on the laptop
-- Check pyautogui: `python3 -c "import pyautogui; pyautogui.write('test')"`
-
-### "WebSocket disconnects frequently"
-- Try a different USB port
-- Make sure the phone screen stays on during punching
-- Disable battery optimization for Chrome on the phone
-
----
-
-## Project Structure
-
-```
-keyboard/
-├── README.md                  ← You are here
-├── app/                       ← Phone-side web app
-│   ├── index.html            ← Main page
-│   ├── style.css             ← Dark glassmorphism theme
-│   └── app.js                ← WebSocket client + UI logic
-└── companion/                 ← Laptop-side companion
-    ├── server.py             ← Main script (ADB + WebSocket + typing)
-    ├── requirements.txt      ← Python dependencies
-    └── start.sh              ← One-command launcher
-```
-
----
-
-## Safety
-
-- **Mouse Failsafe**: Move your mouse to any screen corner to immediately stop all typing (pyautogui built-in safety)
-- **Stop Button**: Press the Stop button on the phone app at any time
-- **Ctrl+C**: Press Ctrl+C in the terminal to shut down everything
-
----
-
-## License
-
-MIT
+All web assets (HTML, CSS, JS, QR code generator) are directly embedded into `server.exe` using `//go:embed`.

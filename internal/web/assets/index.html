@@ -3,15 +3,86 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
-    <meta name="description" content="Turn your Android phone into a USB keyboard for your laptop">
+    <meta name="description" content="Turn your Android phone into a high-speed secure keyboard for your computer">
     <meta name="theme-color" content="#0a0a1a">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Keyboard Punch</title>
+    <title>Auto Typer</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .auth-status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 12px;
+            margin-right: 6px;
+        }
+        .auth-status-badge.paired {
+            background: rgba(0, 206, 201, 0.15);
+            color: #00cec9;
+            border: 1px solid rgba(0, 206, 201, 0.3);
+        }
+        .auth-status-badge.unpaired {
+            background: rgba(255, 118, 117, 0.15);
+            color: #ff7675;
+            border: 1px solid rgba(255, 118, 117, 0.3);
+        }
+        .pairing-modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(5, 5, 15, 0.85);
+            backdrop-filter: blur(12px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            padding: 20px;
+        }
+        .pairing-modal {
+            background: #12182b;
+            border: 1px solid rgba(0, 206, 201, 0.3);
+            border-radius: 20px;
+            max-width: 360px;
+            width: 100%;
+            padding: 28px 24px;
+            text-align: center;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.5);
+        }
+        .pin-input {
+            width: 100%;
+            padding: 14px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(0, 206, 201, 0.4);
+            border-radius: 12px;
+            color: #00cec9;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 24px;
+            letter-spacing: 6px;
+            text-align: center;
+            outline: none;
+            margin: 18px 0;
+            box-sizing: border-box;
+        }
+        .pin-submit-btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #00cec9, #6c5ce7);
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .pin-submit-btn:hover { opacity: 0.95; transform: translateY(-1px); }
+    </style>
 </head>
 <body>
     <div class="app-container">
@@ -35,11 +106,14 @@
                         <path d="M7 20 L17 20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
                     </svg>
                 </div>
-                <h1 class="app-title">Keyboard Punch</h1>
+                <h1 class="app-title">Auto Typer</h1>
             </div>
-            <div class="connection-badge" id="connection-badge">
-                <span class="connection-dot" id="connection-dot"></span>
-                <span class="connection-text" id="connection-text">Offline</span>
+            <div style="display: flex; align-items: center;">
+                <span class="auth-status-badge paired" id="auth-status-badge">🔒 Paired</span>
+                <div class="connection-badge" id="connection-badge">
+                    <span class="connection-dot" id="connection-dot"></span>
+                    <span class="connection-text" id="connection-text">Offline</span>
+                </div>
             </div>
         </header>
 
@@ -55,7 +129,7 @@
                     <textarea 
                         id="text-input" 
                         class="text-input" 
-                        placeholder="Type or paste your text here...&#10;&#10;✓ Multi-line supported&#10;✓ Tabs &amp; special characters&#10;✓ Code snippets"
+                        placeholder="Type or paste your text here...&#10;&#10;✓ Multi-line supported&#10;✓ Tabs &amp; special characters&#10;✓ Full Unicode &amp; emojis&#10;✓ Code snippets"
                         spellcheck="false"
                         autocomplete="off"
                         autocorrect="off"
@@ -248,8 +322,21 @@
             <span class="toast-icon" id="toast-icon"></span>
             <span class="toast-message" id="toast-message"></span>
         </div>
+
+        <!-- Pairing Required Modal (Hidden by default) -->
+        <div class="pairing-modal-overlay hidden" id="pairing-modal-overlay">
+            <div class="pairing-modal">
+                <div style="font-size: 36px; margin-bottom: 8px;">🔒</div>
+                <h2 style="font-size: 19px; color: #fff; margin: 0 0 8px 0;">Pairing Required</h2>
+                <p style="font-size: 13px; color: #8e9bb4; margin: 0; line-height: 1.5;">
+                    Scan the QR code on your laptop screen, or enter the 6-digit PIN to authorize typing:
+                </p>
+                <input type="text" id="pin-input" class="pin-input" maxlength="6" placeholder="000000" inputmode="numeric">
+                <button type="button" id="pin-submit-btn" class="pin-submit-btn">Authorize Device</button>
+            </div>
+        </div>
     </div>
 
-    <script src="app.js?v=4"></script>
+    <script src="/static/app.js?v=5"></script>
 </body>
 </html>

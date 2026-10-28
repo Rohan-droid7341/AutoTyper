@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto Typer — Hub & Pairing</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .dashboard-container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 30px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+        }
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 768px) {
+            .grid-2 { grid-template-columns: 1fr; }
+        }
+        .card {
+            background: rgba(22, 27, 46, 0.7);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 18px;
+            padding: 24px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .qr-wrapper {
+            background: #ffffff;
+            padding: 16px;
+            border-radius: 14px;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0 auto;
+            box-shadow: 0 8px 25px rgba(0, 206, 201, 0.2);
+        }
+        .qr-wrapper img {
+            width: 220px;
+            height: 220px;
+            display: block;
+        }
+        .pin-display {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .pin-digit {
+            background: rgba(0, 206, 201, 0.1);
+            border: 1px solid rgba(0, 206, 201, 0.4);
+            color: #00cec9;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 28px;
+            font-weight: 700;
+            width: 44px;
+            height: 52px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+        }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .badge-success { background: rgba(0, 206, 201, 0.15); color: #00cec9; border: 1px solid rgba(0, 206, 201, 0.3); }
+        .badge-warning { background: rgba(253, 203, 110, 0.15); color: #ffeaa7; border: 1px solid rgba(253, 203, 110, 0.3); }
+        .badge-danger { background: rgba(255, 118, 117, 0.15); color: #ff7675; border: 1px solid rgba(255, 118, 117, 0.3); }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 14px;
+        }
+        .info-row:last-child { border-bottom: none; }
+        .info-label { color: #8e9bb4; }
+        .info-val { font-family: 'JetBrains Mono', monospace; color: #ffffff; font-weight: 500; }
+        .copy-box {
+            display: flex;
+            gap: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 6px 10px;
+            align-items: center;
+        }
+        .copy-box input {
+            background: transparent;
+            border: none;
+            color: #00cec9;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            width: 100%;
+            outline: none;
+        }
+        .btn {
+            background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 10px 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .btn:hover { transform: translateY(-2px); opacity: 0.95; }
+        .btn-stop {
+            background: linear-gradient(135deg, #d63031, #ff7675);
+        }
+        .device-pill {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(255, 255, 255, 0.04);
+            padding: 10px 14px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="ambient-glow" id="ambient-glow" style="opacity: 0.6;"></div>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <header style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div class="logo-icon">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                        <rect x="2" y="4" width="20" height="12" rx="2.5" stroke="#00cec9" stroke-width="1.8"/>
+                        <circle cx="7" cy="8" r="1" fill="#00cec9"/>
+                        <circle cx="12" cy="8" r="1" fill="#00cec9"/>
+                        <circle cx="17" cy="8" r="1" fill="#00cec9"/>
+                        <rect x="6" y="11" width="12" height="2" rx="0.5" fill="#00cec9"/>
+                        <path d="M10 16 L10 20 M14 16 L14 20 M7 20 L17 20" stroke="#00cec9" stroke-width="1.8" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1 style="font-size: 22px; margin: 0; font-weight: 700; color: #fff;">Auto Typer Server</h1>
+                    <span style="font-size: 13px; color: #8e9bb4;">Secure Companion Hub</span>
+                </div>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <a id="open-typer-btn" href="/" class="btn" target="_blank">
+                    🚀 Open Web App
+                </a>
+                <button id="stop-server-btn" class="btn btn-stop" onclick="stopServer()">
+                    🛑 Stop Server
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Grid -->
+        <div class="grid-2">
+            <!-- Left: QR Code & Pairing -->
+            <div class="card" style="align-items: center; text-align: center;">
+                <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
+                    <h2 style="font-size: 17px; margin: 0; color: #fff;">📱 Phone Pairing</h2>
+                    <span class="badge badge-success">🔒 Token Protected</span>
+                </div>
+                <p style="font-size: 13px; color: #8e9bb4; margin: 0;">
+                    Scan with your phone to gain write access. Only paired devices can punch text to this computer.
+                </p>
+
+                <div class="qr-wrapper">
+                    <img id="qr-img" src="/api/qr.png" alt="Scan to pair">
+                </div>
+
+                <div style="width: 100%;">
+                    <span style="font-size: 12px; color: #8e9bb4; text-transform: uppercase; letter-spacing: 1px;">Or enter 6-digit PIN on phone:</span>
+                    <div class="pin-display" id="pin-container">
+                        <div class="pin-digit">-</div>
+                        <div class="pin-digit">-</div>
+                        <div class="pin-digit">-</div>
+                        <div class="pin-digit">-</div>
+                        <div class="pin-digit">-</div>
+                        <div class="pin-digit">-</div>
+                    </div>
+                </div>
+
+                <div style="width: 100%; text-align: left;">
+                    <span style="font-size: 12px; color: #8e9bb4;">Pairing URL:</span>
+                    <div class="copy-box">
+                        <input id="pairing-url-input" type="text" readonly value="Loading...">
+                        <button class="btn" style="padding: 5px 10px; font-size: 12px;" onclick="copyUrl()">Copy</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: Diagnostics & Connected Devices -->
+            <div style="display: flex; flex-direction: column; gap: 20px;">
+                <!-- Status Card -->
+                <div class="card">
+                    <h2 style="font-size: 17px; margin: 0; color: #fff;">⚡ Server Status</h2>
+                    <div class="info-row">
+                        <span class="info-label">HTTP &amp; WebSocket Port</span>
+                        <span class="info-val" id="val-port">8080</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">USB ADB Reverse</span>
+                        <span id="val-adb" class="badge badge-warning">Checking...</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Local Wi-Fi IP</span>
+                        <span class="info-val" id="val-ip">Detecting...</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Failsafe Mode</span>
+                        <span class="badge badge-success">Active (Screen Corners)</span>
+                    </div>
+                </div>
+
+                <!-- Connected Devices Card -->
+                <div class="card" style="flex: 1;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h2 style="font-size: 17px; margin: 0; color: #fff;">Connected Devices</h2>
+                        <span id="device-count-badge" class="badge badge-success">0 Online</span>
+                    </div>
+                    <p style="font-size: 13px; color: #8e9bb4; margin: 0;">
+                        Live connections over USB cable or local Wi-Fi.
+                    </p>
+                    <div id="device-list" style="overflow-y: auto; max-height: 200px;">
+                        <div style="font-size: 13px; color: #636e72; text-align: center; padding: 20px 0;">
+                            No devices paired yet. Scan the QR code with your phone.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentPairingUrl = '';
+        let currentToken = '';
+
+        async function fetchStatus() {
+            try {
+                const res = await fetch('/api/status');
+                if (!res.ok) return;
+                const data = await res.json();
+
+                // Update Port
+                document.getElementById('val-port').textContent = data.port;
+
+                // Update ADB
+                const adbBadge = document.getElementById('val-adb');
+                if (data.adb && data.adb.connected) {
+                    adbBadge.className = 'badge badge-success';
+                    adbBadge.textContent = '✓ USB Connected (' + data.adb.device_id + ')';
+                } else if (data.adb && data.adb.installed) {
+                    adbBadge.className = 'badge badge-warning';
+                    adbBadge.textContent = 'Wi-Fi Mode (No USB)';
+                } else {
+                    adbBadge.className = 'badge badge-warning';
+                    adbBadge.textContent = 'Wi-Fi Mode';
+                }
+
+                // Update IP
+                if (data.local_ips && data.local_ips.length > 0) {
+                    document.getElementById('val-ip').textContent = data.local_ips[0];
+                }
+
+                // Update PIN
+                if (data.pairing_pin) {
+                    const pinDigits = data.pairing_pin.split('');
+                    const pinContainer = document.getElementById('pin-container');
+                    pinContainer.innerHTML = pinDigits.map(d => `<div class="pin-digit">${d}</div>`).join('');
+                }
+
+                // Update Token & URL
+                if (data.pairing_token) {
+                    currentToken = data.pairing_token;
+                    const host = (data.local_ips && data.local_ips.length > 0) ? data.local_ips[0] : window.location.hostname;
+                    currentPairingUrl = `http://${host}:${data.port}/?token=${data.pairing_token}`;
+                    document.getElementById('pairing-url-input').value = currentPairingUrl;
+                    document.getElementById('open-typer-btn').href = `/?token=${data.pairing_token}`;
+                }
+
+                // Update Devices
+                const devList = document.getElementById('device-list');
+                const countBadge = document.getElementById('device-count-badge');
+                if (data.devices && data.devices.length > 0) {
+                    countBadge.textContent = `${data.devices.length} Online`;
+                    devList.innerHTML = data.devices.map(dev => {
+                        const isAuth = dev.authorized;
+                        return `
+                            <div class="device-pill">
+                                <div>
+                                    <div style="font-weight: 600; font-size: 13px; color: #fff;">${dev.remote_addr}</div>
+                                    <div style="font-size: 11px; color: #8e9bb4; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                        ${dev.user_agent || 'Unknown Client'}
+                                    </div>
+                                </div>
+                                <div>
+                                    ${isAuth ? '<span class="badge badge-success">🔒 Paired</span>' : '<span class="badge badge-danger">⚠️ Unpaired</span>'}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    countBadge.textContent = '0 Online';
+                    devList.innerHTML = `
+                        <div style="font-size: 13px; color: #636e72; text-align: center; padding: 20px 0;">
+                            No devices paired yet. Scan the QR code with your phone.
+                        </div>
+                    `;
+                }
+
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function copyUrl() {
+            const input = document.getElementById('pairing-url-input');
+            input.select();
+            navigator.clipboard.writeText(input.value);
+            alert('Pairing URL copied to clipboard!');
+        }
+
+        async function stopServer() {
+            if (!confirm('Are you sure you want to shut down the Auto Typer server?')) return;
+            try {
+                await fetch('/api/shutdown', { method: 'POST' });
+                document.body.innerHTML = `
+                    <div style="display:flex; justify-content:center; align-items:center; height:100vh; font-family:sans-serif; text-align:center; color:#fff;">
+                        <div>
+                            <h1 style="color:#00cec9;">Server Stopped</h1>
+                            <p style="color:#8e9bb4;">Auto Typer server was gracefully terminated. You may close this tab.</p>
+                        </div>
+                    </div>
+                `;
+            } catch (e) {
+                alert('Server stopped.');
+            }
+        }
+
+        fetchStatus();
+        setInterval(fetchStatus, 2000);
+    </script>
+</body>
+</html>
