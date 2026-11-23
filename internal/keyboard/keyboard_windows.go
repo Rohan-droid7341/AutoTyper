@@ -270,3 +270,11 @@ func setClipboardText(text string) error {
 	}
 	return nil
 }
+
+func checkAccessibilityPlatform() bool {
+	return true
+}
+
+func requestAccessibilityPlatform() {
+	// No-op on Windows
+}

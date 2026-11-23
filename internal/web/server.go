@@ -14,7 +14,9 @@ import (
 
 	"autotyper/internal/adb"
 	"autotyper/internal/auth"
+	"autotyper/internal/keyboard"
 	"autotyper/internal/state"
+	"runtime"
 
 	"github.com/gorilla/websocket"
 	"github.com/skip2/go-qrcode"
@@ -104,6 +106,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/dashboard", s.handleDashboard)
 	mux.HandleFunc("/api/qr.png", s.handleQRCode)
 	mux.HandleFunc("/api/status", s.handleStatus)
+	mux.HandleFunc("/api/request_permissions", s.handleRequestPermissions)
 	mux.HandleFunc("/api/shutdown", s.handleShutdown)
 	mux.HandleFunc("/ws", s.handleWebSocket)
 
@@ -148,16 +151,24 @@ func (s *Server) handleQRCode(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	adbStatus := adb.Check()
 	data := map[string]interface{}{
-		"port":          s.port,
-		"pairing_token": s.auth.PairingToken,
-		"pairing_pin":   s.auth.PairingPIN,
-		"local_ips":     s.localIPs,
-		"adb":           adbStatus,
-		"devices":       s.auth.GetSessions(),
+		"os":                    runtime.GOOS,
+		"accessibility_trusted": keyboard.CheckAccessibility(),
+		"port":                  s.port,
+		"pairing_token":         s.auth.PairingToken,
+		"pairing_pin":           s.auth.PairingPIN,
+		"local_ips":             s.localIPs,
+		"adb":                   adbStatus,
+		"devices":               s.auth.GetSessions(),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(data)
+}
+
+func (s *Server) handleRequestPermissions(w http.ResponseWriter, r *http.Request) {
+	keyboard.RequestAccessibility()
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]bool{"prompted": true})
 }
 
 func (s *Server) handleShutdown(w http.ResponseWriter, r *http.Request) {

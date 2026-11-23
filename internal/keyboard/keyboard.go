@@ -14,3 +14,15 @@ type KeySimulator interface {
 func New() KeySimulator {
 	return newPlatformSimulator()
 }
+
+// CheckAccessibility returns true if accessibility permission is granted.
+// Always returns true on Windows. On macOS, checks AXIsProcessTrusted.
+func CheckAccessibility() bool {
+	return checkAccessibilityPlatform()
+}
+
+// RequestAccessibility prompts macOS accessibility dialog or opens System Settings.
+// No-op on Windows.
+func RequestAccessibility() {
+	requestAccessibilityPlatform()
+}

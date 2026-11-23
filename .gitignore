@@ -5,6 +5,12 @@
 *.so
 *.dylib
 bin/
+server
+stop
+mac/server
+mac/stop
+mac/server-*
+mac/stop-*
 
 # OS files
 .DS_Store

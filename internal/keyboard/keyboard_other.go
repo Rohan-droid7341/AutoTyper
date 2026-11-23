@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build !windows && !darwin
 
 package keyboard
 
@@ -13,7 +13,7 @@ func newPlatformSimulator() KeySimulator {
 }
 
 func (d *dummySimulator) WriteRune(r rune) error {
-	return fmt.Errorf("keyboard simulation is only implemented on Windows in this build")
+	return fmt.Errorf("keyboard simulation is only implemented on Windows and macOS in this build")
 }
 
 func (d *dummySimulator) PressEnter() error {
@@ -29,9 +29,15 @@ func (d *dummySimulator) PressBackspace() error {
 }
 
 func (d *dummySimulator) PasteText(text string) error {
-	return fmt.Errorf("clipboard paste is only implemented on Windows in this build")
+	return fmt.Errorf("clipboard paste is only implemented on Windows and macOS in this build")
 }
 
 func (d *dummySimulator) CheckFailsafe() bool {
 	return false
 }
+
+func checkAccessibilityPlatform() bool {
+	return true
+}
+
+func requestAccessibilityPlatform() {}

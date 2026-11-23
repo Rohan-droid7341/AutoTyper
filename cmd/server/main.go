@@ -18,6 +18,7 @@ import (
 
 	"autotyper/internal/adb"
 	"autotyper/internal/auth"
+	"autotyper/internal/keyboard"
 	"autotyper/internal/web"
 )
 
@@ -150,6 +151,18 @@ func main() {
 	}
 	defer adb.RemoveReverse()
 
+	// 5b. On macOS, verify and prompt for Accessibility permissions
+	if runtime.GOOS == "darwin" {
+		if !keyboard.CheckAccessibility() {
+			log.Println("⚠️  macOS Accessibility Permissions NOT granted!")
+			log.Println("👉 macOS requires Accessibility permissions to simulate keystrokes into other apps.")
+			log.Println("👉 Prompting system permission dialog and opening System Settings...")
+			keyboard.RequestAccessibility()
+		} else {
+			log.Println("✓ macOS Accessibility permissions granted.")
+		}
+	}
+
 	// 6. Initialize Web Server
 	shutdownChan := make(chan struct{}, 1)
 	serverInstance := web.NewServer(port, authMgr, shutdownChan)
@@ -171,7 +184,12 @@ func main() {
 	log.Printf("🔑 Pairing PIN:        %s", authMgr.PairingPIN)
 	log.Println("──────────────────────────────────────────────────────────")
 	log.Println("  💡 Moving mouse to screen corner activates Emergency Stop")
-	log.Println("  🛑 Run stop.exe or click 'Stop Server' in dashboard to shut down")
+
+	stopHint := "Run stop.exe"
+	if runtime.GOOS == "darwin" {
+		stopHint = "Run ./stop (or ./stop.sh)"
+	}
+	log.Printf("  🛑 %s or click 'Stop Server' in dashboard to shut down", stopHint)
 	log.Println("──────────────────────────────────────────────────────────")
 
 	// Open pairing dashboard automatically

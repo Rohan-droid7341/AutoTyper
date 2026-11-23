@@ -191,6 +191,20 @@
             </div>
         </header>
 
+        <!-- macOS Accessibility Permission Alert Banner -->
+        <div id="mac-permission-banner" style="display: none; background: rgba(255, 107, 107, 0.12); border: 1px solid rgba(255, 107, 107, 0.4); border-radius: 14px; padding: 14px 18px; margin-bottom: 20px; align-items: center; justify-content: space-between; gap: 14px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <span style="font-size: 26px;">⚠️</span>
+                <div>
+                    <strong style="color: #ff7675; font-size: 14px; display: block;">macOS Accessibility Permission Required</strong>
+                    <span style="color: #b2bec3; font-size: 13px;">macOS requires Accessibility permission in System Settings to allow typing keystrokes into other applications.</span>
+                </div>
+            </div>
+            <button class="btn" style="background: linear-gradient(135deg, #ff7675, #d63031); color: #fff; white-space: nowrap; font-size: 13px; padding: 9px 16px; border: none; cursor: pointer;" onclick="requestMacPermissions()">
+                🔑 Grant Permission
+            </button>
+        </div>
+
         <!-- Main Grid -->
         <div class="grid-2">
             <!-- Left: QR Code & Pairing -->
@@ -327,6 +341,14 @@
                     document.getElementById('open-typer-btn').href = `/?token=${data.pairing_token}`;
                 }
 
+                // Check macOS Accessibility Permissions
+                const banner = document.getElementById('mac-permission-banner');
+                if (data.os === 'darwin' && data.accessibility_trusted === false) {
+                    banner.style.display = 'flex';
+                } else if (banner) {
+                    banner.style.display = 'none';
+                }
+
                 // Update IPs dropdown if changed
                 if (data.local_ips && JSON.stringify(data.local_ips) !== JSON.stringify(availableIPs)) {
                     availableIPs = data.local_ips;
@@ -417,6 +439,15 @@
             input.select();
             navigator.clipboard.writeText(input.value);
             alert('Pairing URL copied to clipboard!');
+        }
+
+        async function requestMacPermissions() {
+            try {
+                await fetch('/api/request_permissions', { method: 'POST' });
+                alert('Triggered permission prompt! Please grant Auto Typer access under macOS System Settings > Privacy & Security > Accessibility.');
+            } catch (e) {
+                console.error('Failed to request permissions', e);
+            }
         }
 
         async function stopServer() {
